@@ -19,7 +19,6 @@ from login_helper import (
     mark_message_backed_up,
     save_backup_config,
     get_backup_configs,
-    clear_backup_progress,
 )
 
 # Load environment variables
@@ -252,12 +251,12 @@ async def backup_command(client: Client, message: Message):
     user_id = message.from_user.id
     
     # Check if user has any logged in accounts
-    sessions = get_user_sessions(user_id)
+    sessions = await get_user_sessions(user_id)
     if not sessions:
         return await message.reply_text("❌ Anda belum login akun userbot manapun. Gunakan `/login` terlebih dahulu.")
     
     # Show saved backup configs if any
-    saved_configs = get_backup_configs(user_id)
+    saved_configs = await get_backup_configs(user_id)
     
     if saved_configs:
         keyboard = []
@@ -363,7 +362,7 @@ async def backupconfigs_command(client: Client, message: Message):
 async def accounts_command(client: Client, message: Message):
     """Handle /accounts command - List registered accounts"""
     user_id = message.from_user.id
-    sessions = get_user_sessions(user_id)
+    sessions = await get_user_sessions(user_id)
     accounts_list = f"📱 **Akun UserBot yang tersimpan:**\n\n" + "\n".join(f"• `{a}`" for a in sessions) if sessions else "❌ Tidak ada akun yang tersimpan."
     
     if sessions:
@@ -445,7 +444,7 @@ async def _process_backup_source(client: Client, message: Message, text: str):
     
     # Lazy load session from database if not active - use user's saved phone
     if not userbot_client and db_initialized:
-        sessions = get_user_sessions(user_id)
+        sessions = await get_user_sessions(user_id)
         if sessions:
             # Use first available session phone for lazy loading
             phone = sessions[0].replace("+", "")
@@ -524,7 +523,7 @@ async def _process_backup_target(client: Client, message: Message, text: str):
         source_info = await userbot_client.get_chat(source)
         
         # Save backup config for future use
-        save_backup_config(
+        await save_backup_config(
             user_id, 
             source, 
             chat_info.username or chat_info.id,
@@ -600,9 +599,12 @@ async def callback_handler(client: Client, callback_query):
         await callback_query.answer("⏳ Memverifikasi kode...", show_alert=False)
         
         success, result_msg, user_client, session_name = await verify_login_code(user_id, code)
-        
+
         if success:
             active_userbots[session_name] = user_client
+            # Clean up code input state
+            if user_id in user_code_input:
+                del user_code_input[user_id]
         elif "2FA" in result_msg:
             del user_code_input[user_id]
         
@@ -691,7 +693,7 @@ async def callback_handler(client: Client, callback_query):
         )
     
     elif data == "new_backup":
-        sessions = get_user_sessions(user_id)
+        sessions = await get_user_sessions(user_id)
         if len(sessions) > 1:
             keyboard = []
             for phone in sessions:
@@ -733,7 +735,7 @@ async def callback_handler(client: Client, callback_query):
         source, target = parts
         
         # Find active userbot
-        sessions = get_user_sessions(user_id)
+        sessions = await get_user_sessions(user_id)
         userbot_client = None
         for phone in sessions:
             session_name = f"ubot_{user_id}_{phone.replace('+', '').replace(' ', '')}"
@@ -761,7 +763,7 @@ async def callback_handler(client: Client, callback_query):
         asyncio.create_task(_run_backup_process(user_id, userbot_client, source, target))
     
     elif data == "refresh_ubots":
-        sessions = get_user_sessions(user_id)
+        sessions = await get_user_sessions(user_id)
         await callback_query.message.edit_text(
             f"📱 **Akun UserBot yang tersimpan:**\n\n" + "\n".join(f"• `{a}`" for a in sessions) if sessions else "❌ Tidak ada akun yang tersimpan.",
             reply_markup=get_userbot_list_keyboard(user_id, sessions)
@@ -965,18 +967,6 @@ async def _load_sessions_from_db():
         logger.info(f"Loaded {len(sessions)} sessions from database")
     except Exception as e:
         logger.error(f"Failed to load sessions from DB: {e}")
-
-
-def get_session_string_from_db(user_id: int, phone: str) -> Optional[str]:
-    """Get session string from database"""
-    if not db_initialized:
-        return None
-    
-    try:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(load_session_from_db(user_id, phone))
-    except Exception:
-        return None
 
 
 # Make sessions persist by disconnecting properly

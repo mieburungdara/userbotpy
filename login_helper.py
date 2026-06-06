@@ -34,6 +34,8 @@ pending_logins = {}
 db_engine = None
 db_session_factory = None
 SessionModel = None
+BackupProgressModel = None
+BackupConfigModel = None
 
 # Environment variable for database URL
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -69,7 +71,7 @@ def init_database():
             session_string = Column(String, nullable=False)
             
             def __repr__(self):
-                return f"<UserbotSession(user_id={self.user_id}, phone='{self.phone}'>"
+                return f"<UserbotSession(user_id={self.user_id}, phone='{self.phone}')>"
         
         class BackupProgress(Base):
             __tablename__ = "backup_progress"
@@ -90,6 +92,11 @@ def init_database():
         
         class BackupConfig(Base):
             __tablename__ = "backup_configs"
+            __table_args__ = (
+                Index("idx_backup_configs_user", "user_id"),
+                Index("idx_backup_configs_unique", "user_id", "source_chat", "target_chat", unique=True),
+            )
+            
             id = Column(Integer, primary_key=True)
             user_id = Column(Integer, nullable=False)
             source_chat = Column(String, nullable=False)
@@ -97,8 +104,6 @@ def init_database():
             source_title = Column(String, nullable=True)
             target_title = Column(String, nullable=True)
             created_at = Column(DateTime, server_default="NOW()")
-            
-            __table_args__ = {"extend_existing": True}
             
             def __repr__(self):
                 return f"<BackupConfig(user_id={self.user_id}, source='{self.source_chat}' -> target='{self.target_chat}')>"
@@ -114,8 +119,8 @@ def init_database():
         return False
 
 
-def get_user_sessions(user_id: int) -> list:
-    """Get list of session phones for a user"""
+def get_user_sessions_sync(user_id: int) -> list:
+    """Get list of session phones for a user - sync version"""
     accounts = []
     
     # Try database first
@@ -143,8 +148,18 @@ def get_user_sessions(user_id: int) -> list:
     return accounts
 
 
+async def get_user_sessions(user_id: int) -> list:
+    """Get list of session phones for a user - async wrapper"""
+    return await asyncio.to_thread(get_user_sessions_sync, user_id)
+
+
 async def save_session_to_db(user_id: int, phone: str, session_string: str):
     """Save session string to database - updates existing or creates new"""
+    return await asyncio.to_thread(_save_session_to_db_sync, user_id, phone, session_string)
+
+
+def _save_session_to_db_sync(user_id: int, phone: str, session_string: str) -> bool:
+    """Save session string to database - sync version"""
     if not SessionModel or not db_session_factory:
         return False
     
@@ -253,27 +268,6 @@ def mark_message_backed_up_sync(user_id: int, source_chat: str, target_chat: str
         return False
 
 
-def get_backup_config(user_id: int) -> Optional[Tuple[str, str]]:
-    """Get last used backup source/target for a user"""
-    global BackupProgressModel
-    if not BackupProgressModel or not db_session_factory:
-        return None
-    
-    try:
-        db_session = db_session_factory()
-        # Get the most recent backup configuration
-        last_backup = db_session.query(BackupProgressModel).filter(
-            BackupProgressModel.user_id == user_id
-        ).order_by(BackupProgressModel.id.desc()).first()
-        db_session.close()
-        if last_backup:
-            return last_backup.source_chat, last_backup.target_chat
-        return None
-    except Exception as e:
-        logger.error(f"Failed to get backup config: {e}")
-        return None
-
-
 def clear_backup_progress(user_id: int, source_chat: str, target_chat: str):
     """Clear backup progress to allow re-backup (for force backup)"""
     global BackupProgressModel
@@ -295,8 +289,13 @@ def clear_backup_progress(user_id: int, source_chat: str, target_chat: str):
         return False
 
 
-def save_backup_config(user_id: int, source_chat: str, target_chat: str, source_title: str = None, target_title: str = None):
+async def save_backup_config(user_id: int, source_chat: str, target_chat: str, source_title: str = None, target_title: str = None):
     """Save backup configuration for quick reuse"""
+    return await asyncio.to_thread(_save_backup_config_sync, user_id, source_chat, target_chat, source_title, target_title)
+
+
+def _save_backup_config_sync(user_id: int, source_chat: str, target_chat: str, source_title: str = None, target_title: str = None) -> bool:
+    """Save backup configuration - sync version"""
     global BackupConfigModel
     if not BackupConfigModel or not db_session_factory:
         return False
@@ -327,8 +326,13 @@ def save_backup_config(user_id: int, source_chat: str, target_chat: str, source_
         return False
 
 
-def get_backup_configs(user_id: int) -> list:
+async def get_backup_configs(user_id: int) -> list:
     """Get all backup configurations for a user"""
+    return await asyncio.to_thread(_get_backup_configs_sync, user_id)
+
+
+def _get_backup_configs_sync(user_id: int) -> list:
+    """Get all backup configurations - sync version"""
     global BackupConfigModel
     if not BackupConfigModel or not db_session_factory:
         return []
