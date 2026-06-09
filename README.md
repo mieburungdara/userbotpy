@@ -47,6 +47,12 @@ API_HASH=0123456789abcdef0123456789abcdef
 BOT_TOKEN=1234567890:ABCDEF-GHIJKLmnopqrstuVWXYZ
 PREFIX=!  # Prefix untuk perintah
 
+# Delay acak antar pesan (detik) untuk menghindari throttling
+# Format: RATE_LIMIT_MIN-RATE_LIMIT_MAX (delay acak antara nilai ini)
+# Set RATE_LIMIT_MAX=0 untuk menonaktifkan
+RATE_LIMIT_MIN=4
+RATE_LIMIT_MAX=5
+
 # Optional: PostgreSQL/Supabase Database URL untuk persistensi session
 # DATABASE_URL=postgresql://postgres:password@localhost:5432/userbot_db
 ```

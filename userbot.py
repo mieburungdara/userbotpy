@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import asyncio
+import random
 from typing import Optional
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -36,6 +37,20 @@ API_ID = int(os.getenv("API_ID", "0"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PREFIX = os.getenv("PREFIX", "!")
+# Rate limit range in seconds (random delay between min and max)
+# Set RATE_LIMIT_MAX=0 to disable rate limiting
+try:
+    RATE_LIMIT_MIN = float(os.getenv("RATE_LIMIT_MIN", "4"))
+    RATE_LIMIT_MAX = float(os.getenv("RATE_LIMIT_MAX", "5"))
+    if RATE_LIMIT_MIN < 0 or RATE_LIMIT_MAX < 0:
+        raise ValueError("Rate limits must be non-negative")
+    if RATE_LIMIT_MIN > RATE_LIMIT_MAX:
+        RATE_LIMIT_MIN, RATE_LIMIT_MAX = RATE_LIMIT_MAX, RATE_LIMIT_MIN
+    if RATE_LIMIT_MAX > 3600:
+        RATE_LIMIT_MAX = 3600
+except (ValueError, TypeError):
+    RATE_LIMIT_MIN = 4.0
+    RATE_LIMIT_MAX = 5.0
 
 # Initialize database on startup
 db_initialized = init_database()
@@ -862,14 +877,15 @@ async def _run_backup_process(user_id: int, userbot_client: Client, source: str,
             f"Progress: Menunggu..."
         )
         
-        # Collect all media messages first
+        # Collect all media messages first (streaming approach for memory efficiency)
         all_media_messages = []
         async for message in userbot_client.search_messages(source, limit=1000):
             if _has_media(message):
                 all_media_messages.append(message)
         
         # Process and forward media messages
-        for message in all_media_messages:
+        total_messages = len(all_media_messages)
+        for idx, message in enumerate(all_media_messages):
             # Check if already backed up (prevent duplicates)
             mgid = str(message.media_group_id) if message.media_group_id else None
             if await is_message_backed_up(user_id, source, message.id, mgid):
@@ -885,6 +901,10 @@ async def _run_backup_process(user_id: int, userbot_client: Client, source: str,
                 logger.error(f"Failed to forward message: {e}")
                 skipped += 1
             
+            # Rate limiting - random delay if enabled
+            if RATE_LIMIT_MAX > 0:
+                await asyncio.sleep(random.uniform(RATE_LIMIT_MIN, RATE_LIMIT_MAX))
+            
             # Update progress every 25 messages
             if processed % 25 == 0 and processed > 0:
                 try:
@@ -892,7 +912,7 @@ async def _run_backup_process(user_id: int, userbot_client: Client, source: str,
                         f"⏳ **Backup Sedang Berjalan...**\n\n"
                         f"**Source:** `{source_chat.title or source_chat.first_name}`\n"
                         f"**Target:** `{target_chat.title or target_chat.first_name}`\n\n"
-                        f"Progress: {processed} terkirim, {already_backed_up} sudah ada, {skipped} gagal"
+                        f"Progress: {processed}/{total_messages} terkirim, {already_backed_up} sudah ada, {skipped} gagal"
                     )
                 except Exception:
                     pass

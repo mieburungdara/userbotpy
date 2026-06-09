@@ -20,6 +20,7 @@ python userbot.py
 - Database tables (`userbot_sessions`, `backup_progress`, `backup_configs`) created automatically on startup
 - Userbots lazy-load from DB on demand: `ubot_{user_id}_{phone}` naming convention
 - Phone numbers with `62` prefix auto-converted to `+62` format
+- Automatic 4-5s random delay between forwarded messages to prevent Telegram throttling
 
 ## No Tests/Lint
 This project has no test framework or linting configured.
