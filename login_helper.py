@@ -21,6 +21,7 @@ try:
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.exc import SQLAlchemyError
+    from pyrogram.errors.exceptions.unauthorized_401 import SessionRevoked
     SQLALCHEMY_AVAILABLE = True
 except ImportError:
     SQLALCHEMY_AVAILABLE = False
@@ -394,6 +395,8 @@ async def start_login_process(user_id: int, phone: str, api_id: int, api_hash: s
         return False, "❌ Nomor telepon tidak valid. Pastikan formatnya benar (misal: +628123456789)"
     except ApiIdInvalid:
         return False, "❌ API ID atau API Hash tidak valid"
+    except SessionRevoked:
+        return False, "❌ Sesi tidak valid. File session mungkin korup. Hapus file session secara manual."
     except Exception as e:
         logger.error(f"Login error for {phone}: {e}")
         return False, f"❌ Gagal memulai proses login: {str(e)}"

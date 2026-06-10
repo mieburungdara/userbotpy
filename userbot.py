@@ -6,6 +6,7 @@ import random
 from typing import Optional
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors.exceptions.unauthorized_401 import SessionRevoked
 from dotenv import load_dotenv
 from login_helper import (
     start_login_process,
@@ -324,6 +325,9 @@ async def backup_command(client: Client, message: Message):
                 await userbot_client.connect()
                 await userbot_client.get_me()
                 active_userbots[session_name] = userbot_client
+            except SessionRevoked:
+                logger.error(f"Session revoked for {session_name}, user must re-login")
+                userbot_client = None
             except Exception as e:
                 logger.error(f"Failed to load session from DB in backup: {e}")
                 userbot_client = None
@@ -478,6 +482,9 @@ async def _process_backup_source(client: Client, message: Message, text: str):
                     await userbot_client.get_me()
                     backup_sessions[user_id]["client"] = userbot_client
                     active_userbots[session_name] = userbot_client
+                except SessionRevoked:
+                    logger.error(f"Session revoked for {session_name}, user must re-login")
+                    return await message.reply_text(f"❌ Sesi userbot tidak valid (SESSION_REVOKED). Gunakan `/login` untuk login ulang.")
                 except Exception as e:
                     logger.error(f"Failed to load session from DB for backup: {e}")
                     return await message.reply_text(f"❌ Gagal memuat sesi userbot: {str(e)}")
@@ -680,6 +687,9 @@ async def callback_handler(client: Client, callback_query):
                     await userbot_client.connect()
                     await userbot_client.get_me()
                     active_userbots[session_name] = userbot_client
+                except SessionRevoked:
+                    logger.error(f"Session revoked for {session_name}, user must re-login")
+                    userbot_client = None
                 except Exception as e:
                     logger.error(f"Failed to load session from DB: {e}")
                     userbot_client = None
@@ -730,6 +740,9 @@ async def callback_handler(client: Client, callback_query):
                         await userbot_client.connect()
                         await userbot_client.get_me()
                         active_userbots[session_name] = userbot_client
+                    except SessionRevoked:
+                        logger.error(f"Session revoked for {session_name}, user must re-login")
+                        userbot_client = None
                     except Exception:
                         pass
             
@@ -767,6 +780,9 @@ async def callback_handler(client: Client, callback_query):
                     await userbot_client.connect()
                     await userbot_client.get_me()
                     active_userbots[session_name] = userbot_client
+                except SessionRevoked:
+                    logger.error(f"Session revoked for {session_name}, user must re-login")
+                    userbot_client = None
                 except Exception:
                     pass
         
